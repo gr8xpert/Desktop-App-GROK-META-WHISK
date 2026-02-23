@@ -91,8 +91,8 @@ class Orchestrator {
     this._providerSemaphores = {
       meta: new Semaphore(4),
       grok: new Semaphore(4),
-      whisk: new Semaphore(4),
-      imagefx: new Semaphore(4)
+      whisk: new Semaphore(10),
+      imagefx: new Semaphore(10)
     };
 
     // Track pending+active job counts per provider for cleanup
@@ -528,59 +528,58 @@ class Orchestrator {
   }
 
   async _processProviderQueue(provider, queue, batchState, settings) {
-    console.log(`[ORCH] Starting ${provider} queue (${queue.length} jobs)`);
+    console.log(`[ORCH] Starting ${provider} queue (${queue.length} jobs) — parallel with semaphore`);
 
-    for (let i = 0; i < queue.length; i++) {
-      if (!this._running && batchState.completed + batchState.failed > 0) {
-        // Allow cancellation during batch
-        break;
+    const sem = this._providerSemaphores[provider];
+
+    // Fire all jobs in parallel, semaphore controls concurrency
+    const jobPromises = queue.map(({ dbJob, jobDef }, i) => (async () => {
+      await sem.acquire();
+      try {
+        if (!this._running && batchState.completed + batchState.failed > 0) {
+          return; // Batch cancelled
+        }
+
+        // Update status
+        this.db.updateJob(dbJob.id, { status: 'running' });
+        batchState.running++;
+
+        this.emitProgress({
+          event: 'batch:job-start',
+          batchId: batchState.id,
+          jobId: dbJob.id,
+          provider,
+          index: i + 1,
+          total: queue.length,
+          batchTotal: batchState.total,
+          batchCompleted: batchState.completed
+        });
+
+        // Execute the job
+        await this._executeJob(dbJob, jobDef);
+
+        batchState.running--;
+        const updatedJob = this.db.getJob(dbJob.id);
+        if (updatedJob && updatedJob.status === 'success') {
+          batchState.completed++;
+        } else {
+          batchState.failed++;
+        }
+
+        this.emitProgress({
+          event: 'batch:progress',
+          batchId: batchState.id,
+          completed: batchState.completed,
+          failed: batchState.failed,
+          total: batchState.total,
+          provider
+        });
+      } finally {
+        sem.release();
       }
+    })());
 
-      const { dbJob, jobDef } = queue[i];
-
-      // Update status
-      this.db.updateJob(dbJob.id, { status: 'running' });
-      batchState.running++;
-
-      this.emitProgress({
-        event: 'batch:job-start',
-        batchId: batchState.id,
-        jobId: dbJob.id,
-        provider,
-        index: i + 1,
-        total: queue.length,
-        batchTotal: batchState.total,
-        batchCompleted: batchState.completed
-      });
-
-      // Execute the job
-      await this._executeJob(dbJob, jobDef);
-
-      batchState.running--;
-      const updatedJob = this.db.getJob(dbJob.id);
-      if (updatedJob && updatedJob.status === 'success') {
-        batchState.completed++;
-      } else {
-        batchState.failed++;
-      }
-
-      this.emitProgress({
-        event: 'batch:progress',
-        batchId: batchState.id,
-        completed: batchState.completed,
-        failed: batchState.failed,
-        total: batchState.total,
-        provider
-      });
-
-      // Delay between jobs within same provider (avoid rate limits)
-      if (i < queue.length - 1) {
-        const delay = (settings.delayBetween || 10) * 1000;
-        console.log(`[ORCH] ${provider}: waiting ${delay / 1000}s before next job`);
-        await new Promise(r => setTimeout(r, delay));
-      }
-    }
-
+    await Promise.allSettled(jobPromises);
     console.log(`[ORCH] ${provider} queue complete`);
   }
 

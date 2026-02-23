@@ -22,7 +22,7 @@ class Config {
         delayBetween: 10,
         namingPattern: '{provider}_{index}_{timestamp}',
         preWarmBrowsers: false,
-        headless: false
+        headless: true
       },
       providerStatus: {
         meta: 'unconfigured',

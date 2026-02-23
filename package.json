@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@rohitaryal/imagefx-api": "^3.0.3",
+    "@rohitaryal/whisk-api": "^4.0.0",
     "playwright-core": "^1.40.0"
   }
 }

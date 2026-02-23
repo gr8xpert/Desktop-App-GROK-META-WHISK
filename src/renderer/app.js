@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupBulkPromptMode();
   setupT2vBulkMode();
   setupGrokPremiumHint();
+  setupClearButtons();
   setupIPCListeners();
   updateTypeAvailability();
   updatePromptContext();
@@ -89,6 +90,14 @@ function setupProviderSelection() {
       document.querySelectorAll('.provider-option').forEach(o => o.classList.remove('selected'));
       opt.classList.add('selected');
       selectedProvider = opt.dataset.provider;
+
+      // Default Whisk/ImageFX to text-to-image since image-to-video costs Flow tokens
+      if (selectedProvider === 'whisk' || selectedProvider === 'imagefx') {
+        document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('selected'));
+        const t2iPill = document.querySelector('.type-pill[data-type="text-to-image"]');
+        if (t2iPill) { t2iPill.classList.add('selected'); selectedType = 'text-to-image'; }
+      }
+
       updateTypeAvailability();
       updateModelVisibility();
     });
@@ -166,6 +175,12 @@ function updateUploadVisibility() {
   if (resolutionGroup) resolutionGroup.style.display = isGrokVideo ? 'block' : 'none';
   updateGrokPremiumHint();
 
+  // Whisk Flow token warning: show when provider=whisk AND type=image-to-video
+  const whiskFlowHint = document.getElementById('whisk-flow-hint');
+  if (whiskFlowHint) {
+    whiskFlowHint.style.display = (selectedProvider === 'whisk' && selectedType === 'image-to-video') ? 'block' : 'none';
+  }
+
   // Manage aspect ratio options: Grok supports 5 ratios, others only 3
   const grokRatioOptions = document.querySelectorAll('#aspect-ratio option.grok-ratio');
   grokRatioOptions.forEach(opt => {
@@ -208,6 +223,89 @@ function updateGrokPremiumHint() {
   const isPremium = duration === '10s' || resolution === '720p';
   const isGrokVideo = selectedProvider === 'grok' && (selectedType === 'image-to-video' || selectedType === 'text-to-video');
   hint.style.display = (isGrokVideo && isPremium) ? 'block' : 'none';
+}
+
+// ============ Clear Buttons ============
+
+function setupClearButtons() {
+  document.getElementById('clear-upload-btn').addEventListener('click', clearUploadSection);
+  document.getElementById('clear-prompt-btn').addEventListener('click', clearPromptSection);
+}
+
+function clearUploadSection() {
+  // Clear single image upload
+  selectedImages = [];
+  const preview = document.getElementById('drop-preview');
+  if (preview) preview.innerHTML = '';
+  const dropZone = document.getElementById('drop-zone');
+  if (dropZone) {
+    dropZone.querySelector('.drop-zone-icon').style.display = '';
+    dropZone.querySelector('.drop-zone-text').style.display = '';
+    dropZone.querySelector('.drop-zone-hint').style.display = '';
+  }
+
+  // Clear bulk images + prompts
+  bulkPrompts = {};
+  bulkPromptLines = [];
+  const bulkThumbs = document.getElementById('bulk-thumbs');
+  if (bulkThumbs) bulkThumbs.innerHTML = '';
+  const bulkPromptList = document.getElementById('bulk-prompt-list');
+  if (bulkPromptList) bulkPromptList.innerHTML = '';
+  const bulkImgCount = document.getElementById('bulk-img-count');
+  if (bulkImgCount) bulkImgCount.textContent = '0 files';
+  const bulkPromptCount = document.getElementById('bulk-prompt-count');
+  if (bulkPromptCount) bulkPromptCount.textContent = '0 lines';
+  const mappingPreview = document.getElementById('bulk-mapping-preview');
+  if (mappingPreview) mappingPreview.innerHTML = '';
+
+  // Reset drop zones to default state
+  const bulkDropImages = document.getElementById('bulk-drop-images');
+  if (bulkDropImages) bulkDropImages.style.display = '';
+  const bulkDropPrompts = document.getElementById('bulk-drop-prompts');
+  if (bulkDropPrompts) bulkDropPrompts.style.display = '';
+
+  console.log('[UI] Upload section cleared');
+}
+
+function clearPromptSection() {
+  // Clear single prompt
+  const genPrompt = document.getElementById('gen-prompt');
+  if (genPrompt) genPrompt.value = '';
+
+  // Clear text-to-video dual prompts
+  const t2vImage = document.getElementById('t2v-image-prompt');
+  if (t2vImage) t2vImage.value = '';
+  const t2vAnim = document.getElementById('t2v-animation-prompt');
+  if (t2vAnim) t2vAnim.value = '';
+
+  // Clear bulk prompt mode (text-to-image)
+  bulkPromptLinesTxt = [];
+  const bulkPromptListTxt = document.getElementById('bulk-prompt-list-txt');
+  if (bulkPromptListTxt) bulkPromptListTxt.innerHTML = '';
+  const bulkPromptCountTxt = document.getElementById('bulk-prompt-count-txt');
+  if (bulkPromptCountTxt) bulkPromptCountTxt.textContent = '0 lines';
+  const bulkDropPromptsTxt = document.getElementById('bulk-drop-prompts-txt');
+  if (bulkDropPromptsTxt) bulkDropPromptsTxt.style.display = '';
+
+  // Clear t2v bulk mode
+  t2vBulkImagePrompts = [];
+  t2vBulkAnimPrompts = [];
+  const t2vImgList = document.getElementById('t2v-bulk-img-list');
+  if (t2vImgList) t2vImgList.innerHTML = '';
+  const t2vAnimList = document.getElementById('t2v-bulk-anim-list');
+  if (t2vAnimList) t2vAnimList.innerHTML = '';
+  const t2vImgCount = document.getElementById('t2v-bulk-img-count');
+  if (t2vImgCount) t2vImgCount.textContent = '0 lines';
+  const t2vAnimCount = document.getElementById('t2v-bulk-anim-count');
+  if (t2vAnimCount) t2vAnimCount.textContent = '0 lines';
+  const t2vMappingPreview = document.getElementById('t2v-bulk-mapping-preview');
+  if (t2vMappingPreview) t2vMappingPreview.innerHTML = '';
+  const t2vDropImg = document.getElementById('t2v-bulk-drop-img-prompts');
+  if (t2vDropImg) t2vDropImg.style.display = '';
+  const t2vDropAnim = document.getElementById('t2v-bulk-drop-anim-prompts');
+  if (t2vDropAnim) t2vDropAnim.style.display = '';
+
+  console.log('[UI] Prompt section cleared');
 }
 
 // ============ Image Upload ============
@@ -1122,6 +1220,18 @@ function setupBatchTabs() {
       }
     });
   });
+
+  // Clear JSON buttons (per-provider)
+  document.querySelectorAll('.btn-clear-json').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const provider = btn.dataset.provider;
+      const editor = document.getElementById(`json-editor-${provider}`);
+      if (editor) {
+        editor.value = '';
+        validateProviderJson(provider);
+      }
+    });
+  });
 }
 
 function switchBatchTab(provider) {
@@ -1534,8 +1644,8 @@ async function loadHistory() {
         </div>
         <div class="history-actions">
           ${job.status === 'success' ? `
-            <button class="btn btn-secondary btn-icon" data-action="open-file" data-path="${escapeAttr(job.outputPath)}" title="Open file">&#128194;</button>
-            <button class="btn btn-secondary btn-icon" data-action="open-folder" data-path="${escapeAttr(job.outputPath)}" title="Open folder">&#128193;</button>
+            <button class="btn btn-secondary btn-icon" data-action="open-file" data-path="${escapeAttr(job.outputPath)}" title="Open file">&#9654;</button>
+            <button class="btn btn-secondary btn-icon" data-action="open-folder" data-path="${escapeAttr(job.outputPath)}" title="Open folder">&#128194;</button>
           ` : ''}
           ${job.status === 'failed' ? `
             <button class="btn btn-secondary btn-icon" data-action="retry" data-job-id="${job.id}" title="Retry">&#8635;</button>

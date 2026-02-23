@@ -70,23 +70,20 @@
 
       <!-- ============ GENERATE TAB ============ -->
       <div class="tab-page active" id="tab-generate">
-        <!-- Provider Selection -->
+        <!-- Provider + Type -->
         <div class="card">
-          <div class="card-header">
-            <div class="card-title">Provider</div>
+          <div class="card-section">
+            <div class="card-section-label">Provider</div>
+            <div class="provider-grid">
+              <button class="provider-option selected" data-provider="meta">Meta AI</button>
+              <button class="provider-option" data-provider="grok">Grok AI</button>
+              <button class="provider-option" data-provider="whisk">Whisk</button>
+              <button class="provider-option" data-provider="imagefx">ImageFX</button>
+            </div>
           </div>
-          <div class="provider-grid">
-            <button class="provider-option selected" data-provider="meta">Meta AI</button>
-            <button class="provider-option" data-provider="grok">Grok AI</button>
-            <button class="provider-option" data-provider="whisk">Whisk</button>
-            <button class="provider-option" data-provider="imagefx">ImageFX</button>
-          </div>
-        </div>
-
-        <!-- Type + Options -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">Generation Type</div>
+          <div class="card-divider"></div>
+          <div class="card-section">
+            <div class="card-section-label">Generation Type</div>
           </div>
           <div class="type-pills" id="type-pills">
             <button class="type-pill selected" data-type="image-to-video">Image to Video</button>
@@ -94,7 +91,7 @@
             <button class="type-pill" data-type="text-to-image">Text to Image</button>
           </div>
 
-          <div class="form-row" style="margin-top: 16px;">
+          <div class="form-row" style="margin-top: 10px;">
             <div class="form-group" id="aspect-ratio-group">
               <label class="form-label">Aspect Ratio</label>
               <select id="aspect-ratio">
@@ -122,6 +119,9 @@
             <div class="grok-premium-hint" id="grok-premium-hint" style="display:none">
               Requires a paid Grok (SuperGrok) account
             </div>
+            <div class="grok-premium-hint" id="whisk-flow-hint" style="display:none">
+              Image-to-Video consumes Whisk Flow tokens per attempt
+            </div>
             <div class="form-group model-group" id="model-group">
               <label class="form-label">ImageFX Model</label>
               <select id="imagefx-model">
@@ -137,6 +137,7 @@
         <div class="card" id="upload-card">
           <div class="card-header">
             <div class="card-title">Source Image</div>
+            <button class="clear-btn" id="clear-upload-btn" title="Clear all images">Clear</button>
             <button class="bulk-toggle" id="bulk-toggle">Bulk Mode</button>
           </div>
           <div class="drop-zone" id="drop-zone">
@@ -186,6 +187,7 @@
         <div class="card" id="prompt-card">
           <div class="card-header">
             <div class="card-title" id="prompt-title">Prompt</div>
+            <button class="clear-btn" id="clear-prompt-btn" title="Clear all prompts">Clear</button>
             <button class="bulk-toggle" id="bulk-prompt-toggle" style="display: none;">Bulk Mode</button>
             <button class="bulk-toggle" id="t2v-bulk-toggle" style="display: none;">Bulk Mode</button>
           </div>
@@ -314,6 +316,7 @@
                 </div>
                 <button class="btn btn-secondary btn-sm btn-load-prompts" data-provider="meta">Load Prompts (.txt)</button>
                 <button class="btn btn-secondary btn-sm btn-load-json-provider" data-provider="meta">Load JSON</button>
+                <button class="btn btn-sm btn-clear-json" data-provider="meta">Clear</button>
               </div>
             </div>
             <div class="json-editor-container">
@@ -347,6 +350,7 @@
                 </div>
                 <button class="btn btn-secondary btn-sm btn-load-prompts" data-provider="grok">Load Prompts (.txt)</button>
                 <button class="btn btn-secondary btn-sm btn-load-json-provider" data-provider="grok">Load JSON</button>
+                <button class="btn btn-sm btn-clear-json" data-provider="grok">Clear</button>
               </div>
             </div>
             <div class="json-editor-container">
@@ -379,6 +383,7 @@
                 </div>
                 <button class="btn btn-secondary btn-sm btn-load-prompts" data-provider="whisk">Load Prompts (.txt)</button>
                 <button class="btn btn-secondary btn-sm btn-load-json-provider" data-provider="whisk">Load JSON</button>
+                <button class="btn btn-sm btn-clear-json" data-provider="whisk">Clear</button>
               </div>
             </div>
             <div class="json-editor-container">
@@ -410,6 +415,7 @@
                 </div>
                 <button class="btn btn-secondary btn-sm btn-load-prompts" data-provider="imagefx">Load Prompts (.txt)</button>
                 <button class="btn btn-secondary btn-sm btn-load-json-provider" data-provider="imagefx">Load JSON</button>
+                <button class="btn btn-sm btn-clear-json" data-provider="imagefx">Clear</button>
               </div>
             </div>
             <div class="json-editor-container">
