@@ -1,0 +1,21 @@
+{
+  "name": "ai-video-generator",
+  "version": "1.0.0",
+  "description": "Multi-provider AI video/image generator - Meta AI, Grok AI, and Google Whisk",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win portable",
+    "build:dir": "electron-builder --win dir"
+  },
+  "author": "shahzaib",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "@rohitaryal/imagefx-api": "^3.0.3",
+    "playwright-core": "^1.40.0"
+  }
+}
