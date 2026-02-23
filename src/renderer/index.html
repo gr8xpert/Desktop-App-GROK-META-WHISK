@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: file:; script-src 'self' 'unsafe-inline';">
+  <title>AI Video Generator</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Custom Titlebar -->
+  <div class="titlebar">
+    <div class="titlebar-title">
+      <span>AI</span> Video Generator
+    </div>
+    <div class="titlebar-controls">
+      <button class="titlebar-btn" id="btn-minimize">&#x2212;</button>
+      <button class="titlebar-btn" id="btn-maximize">&#x25A1;</button>
+      <button class="titlebar-btn close" id="btn-close">&#x2715;</button>
+    </div>
+  </div>
+
+  <div class="app-container">
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-tab="generate">
+          <span class="nav-icon">&#9655;</span>
+          <span class="nav-text">Generate</span>
+        </button>
+        <button class="nav-item" data-tab="batch">
+          <span class="nav-icon">&#123;&#125;</span>
+          <span class="nav-text">Batch / JSON</span>
+        </button>
+        <button class="nav-item" data-tab="history">
+          <span class="nav-icon">&#128337;</span>
+          <span class="nav-text">History</span>
+        </button>
+        <button class="nav-item" data-tab="settings">
+          <span class="nav-icon">&#9881;</span>
+          <span class="nav-text">Settings</span>
+        </button>
+      </nav>
+
+      <!-- Provider Status -->
+      <div class="sidebar-status">
+        <div class="status-item">
+          <div class="status-dot unconfigured" id="status-meta"></div>
+          <span>Meta AI</span>
+        </div>
+        <div class="status-item">
+          <div class="status-dot unconfigured" id="status-grok"></div>
+          <span>Grok AI</span>
+        </div>
+        <div class="status-item">
+          <div class="status-dot unconfigured" id="status-whisk"></div>
+          <span>Whisk</span>
+        </div>
+        <div class="status-item">
+          <div class="status-dot unconfigured" id="status-imagefx"></div>
+          <span>ImageFX</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="content">
+
+      <!-- ============ GENERATE TAB ============ -->
+      <div class="tab-page active" id="tab-generate">
+        <!-- Provider Selection -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Provider</div>
+          </div>
+          <div class="provider-grid">
+            <button class="provider-option selected" data-provider="meta">Meta AI</button>
+            <button class="provider-option" data-provider="grok">Grok AI</button>
+            <button class="provider-option" data-provider="whisk">Whisk</button>
+            <button class="provider-option" data-provider="imagefx">ImageFX</button>
+          </div>
+        </div>
+
+        <!-- Type + Options -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Generation Type</div>
+          </div>
+          <div class="type-pills" id="type-pills">
+            <button class="type-pill selected" data-type="image-to-video">Image to Video</button>
+            <button class="type-pill" data-type="text-to-video">Text to Video</button>
+            <button class="type-pill" data-type="text-to-image">Text to Image</button>
+          </div>
+
+          <div class="form-row" style="margin-top: 16px;">
+            <div class="form-group" id="aspect-ratio-group">
+              <label class="form-label">Aspect Ratio</label>
+              <select id="aspect-ratio">
+                <option value="9:16">9:16 (Portrait)</option>
+                <option value="16:9">16:9 (Landscape)</option>
+                <option value="1:1">1:1 (Square)</option>
+                <option value="2:3" class="grok-ratio">2:3 (Portrait)</option>
+                <option value="3:2" class="grok-ratio">3:2 (Landscape)</option>
+              </select>
+            </div>
+            <div class="form-group grok-video-options" id="video-duration-group" style="display:none">
+              <label class="form-label">Video Duration</label>
+              <select id="video-duration">
+                <option value="6s">6 seconds</option>
+                <option value="10s">10 seconds</option>
+              </select>
+            </div>
+            <div class="form-group grok-video-options" id="video-resolution-group" style="display:none">
+              <label class="form-label">Video Resolution</label>
+              <select id="video-resolution">
+                <option value="480p">480p</option>
+                <option value="720p">720p</option>
+              </select>
+            </div>
+            <div class="grok-premium-hint" id="grok-premium-hint" style="display:none">
+              Requires a paid Grok (SuperGrok) account
+            </div>
+            <div class="form-group model-group" id="model-group">
+              <label class="form-label">ImageFX Model</label>
+              <select id="imagefx-model">
+                <option value="IMAGEN_3_5" selected>Imagen 3.5 (Default)</option>
+                <option value="IMAGEN_3">Imagen 3</option>
+                <option value="IMAGEN_4">Imagen 4</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Image Upload -->
+        <div class="card" id="upload-card">
+          <div class="card-header">
+            <div class="card-title">Source Image</div>
+            <button class="bulk-toggle" id="bulk-toggle">Bulk Mode</button>
+          </div>
+          <div class="drop-zone" id="drop-zone">
+            <div class="drop-zone-icon">&#128444;</div>
+            <div class="drop-zone-text">Drag & drop images here or click to browse</div>
+            <div class="drop-zone-hint">Supports: JPG, PNG, WebP</div>
+            <div class="drop-zone-preview" id="drop-preview"></div>
+          </div>
+          <input type="file" id="file-input" accept="image/*" style="display:none" multiple>
+
+          <!-- Bulk Mode Panel (hidden by default) -->
+          <div class="bulk-panel" id="bulk-panel" style="display: none;">
+            <div class="bulk-columns">
+              <!-- Left: Images -->
+              <div class="bulk-col" id="bulk-col-images">
+                <div class="bulk-col-header">
+                  <span class="bulk-col-title">&#128444; Images</span>
+                  <span class="bulk-col-count" id="bulk-img-count">0 files</span>
+                </div>
+                <div class="bulk-drop-zone" id="bulk-drop-images">
+                  <div class="bulk-drop-icon">&#128194;</div>
+                  <div class="bulk-drop-text">Drop images or click to browse</div>
+                  <div class="bulk-drop-hint">JPG, PNG, WebP</div>
+                </div>
+                <div class="bulk-thumbs" id="bulk-thumbs"></div>
+              </div>
+              <!-- Right: Prompts -->
+              <div class="bulk-col" id="bulk-col-prompts">
+                <div class="bulk-col-header">
+                  <span class="bulk-col-title">&#128196; Prompts</span>
+                  <span class="bulk-col-count" id="bulk-prompt-count">0 lines</span>
+                </div>
+                <div class="bulk-drop-zone" id="bulk-drop-prompts">
+                  <div class="bulk-drop-icon">&#128221;</div>
+                  <div class="bulk-drop-text">Click to load prompts file</div>
+                  <div class="bulk-drop-hint">.txt &mdash; one prompt per line</div>
+                </div>
+                <div class="bulk-prompt-list" id="bulk-prompt-list"></div>
+              </div>
+            </div>
+            <!-- Mapping preview -->
+            <div class="bulk-mapping-preview" id="bulk-mapping-preview"></div>
+          </div>
+        </div>
+
+        <!-- Prompt -->
+        <div class="card" id="prompt-card">
+          <div class="card-header">
+            <div class="card-title" id="prompt-title">Prompt</div>
+            <button class="bulk-toggle" id="bulk-prompt-toggle" style="display: none;">Bulk Mode</button>
+            <button class="bulk-toggle" id="t2v-bulk-toggle" style="display: none;">Bulk Mode</button>
+          </div>
+          <!-- Single prompt mode -->
+          <div id="single-prompt-panel">
+            <div class="prompt-hint" id="prompt-hint"></div>
+            <div class="form-group">
+              <textarea id="gen-prompt" placeholder="Describe the animation or image you want to generate..." rows="3" style="font-family: 'Outfit', sans-serif;"></textarea>
+            </div>
+          </div>
+          <!-- Bulk prompts mode (hidden by default) -->
+          <div id="bulk-prompt-panel" style="display: none;">
+            <div class="bulk-col-header">
+              <span class="bulk-col-title">&#128196; Prompts</span>
+              <span class="bulk-col-count" id="bulk-prompt-count-txt">0 lines</span>
+            </div>
+            <div class="bulk-drop-zone" id="bulk-drop-prompts-txt">
+              <div class="bulk-drop-icon">&#128221;</div>
+              <div class="bulk-drop-text">Click to load prompts file</div>
+              <div class="bulk-drop-hint">.txt &mdash; one prompt per line</div>
+            </div>
+            <div class="bulk-prompt-list" id="bulk-prompt-list-txt"></div>
+          </div>
+          <!-- Text-to-Video dual prompt mode (hidden by default) -->
+          <div id="t2v-prompt-panel" style="display: none;">
+            <!-- Single mode (two textareas) -->
+            <div id="t2v-single-panel">
+              <div class="t2v-prompt-cols">
+                <div class="t2v-prompt-col">
+                  <label class="form-label">Image Generation Prompt</label>
+                  <div class="prompt-hint">Describe the image to generate first</div>
+                  <textarea id="t2v-image-prompt" placeholder="e.g. A majestic eagle perched on a cliff at sunset..." rows="3" style="font-family: 'Outfit', sans-serif;"></textarea>
+                </div>
+                <div class="t2v-prompt-col">
+                  <label class="form-label">Animation Prompt</label>
+                  <div class="prompt-hint">Describe how to animate the generated image</div>
+                  <textarea id="t2v-animation-prompt" placeholder="e.g. Slow zoom out, eagle spreads wings and takes flight..." rows="3" style="font-family: 'Outfit', sans-serif;"></textarea>
+                </div>
+              </div>
+            </div>
+            <!-- Bulk mode (two .txt file loaders) -->
+            <div id="t2v-bulk-panel" style="display: none;">
+              <div class="bulk-columns">
+                <div class="bulk-col">
+                  <div class="bulk-col-header">
+                    <span class="bulk-col-title">&#127912; Image Prompts</span>
+                    <span class="bulk-col-count" id="t2v-bulk-img-count">0 lines</span>
+                  </div>
+                  <div class="bulk-drop-zone" id="t2v-bulk-drop-img-prompts">
+                    <div class="bulk-drop-icon">&#128221;</div>
+                    <div class="bulk-drop-text">Click to load image prompts</div>
+                    <div class="bulk-drop-hint">.txt &mdash; one prompt per line</div>
+                  </div>
+                  <div class="bulk-prompt-list" id="t2v-bulk-img-list"></div>
+                </div>
+                <div class="bulk-col">
+                  <div class="bulk-col-header">
+                    <span class="bulk-col-title">&#127916; Animation Prompts</span>
+                    <span class="bulk-col-count" id="t2v-bulk-anim-count">0 lines</span>
+                  </div>
+                  <div class="bulk-drop-zone" id="t2v-bulk-drop-anim-prompts">
+                    <div class="bulk-drop-icon">&#128221;</div>
+                    <div class="bulk-drop-text">Click to load animation prompts</div>
+                    <div class="bulk-drop-hint">.txt &mdash; one prompt per line</div>
+                  </div>
+                  <div class="bulk-prompt-list" id="t2v-bulk-anim-list"></div>
+                </div>
+              </div>
+              <div class="bulk-mapping-preview" id="t2v-bulk-mapping-preview"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Output + Start -->
+        <div class="card">
+          <div class="form-row" style="align-items: flex-end;">
+            <div class="form-group" style="flex: 2;">
+              <label class="form-label">Output Folder</label>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="output-folder" placeholder="Select output folder..." readonly>
+                <button class="btn btn-secondary" id="btn-select-folder">Browse</button>
+              </div>
+            </div>
+            <button class="btn btn-primary" id="btn-start" style="height: 42px; padding: 0 32px;">
+              Start Generation
+            </button>
+          </div>
+        </div>
+
+        <!-- Progress -->
+        <div class="progress-container" id="gen-progress">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- ============ BATCH / JSON TAB ============ -->
+      <div class="tab-page" id="tab-batch">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Batch Editor</div>
+          </div>
+
+          <!-- Provider Sub-Tabs -->
+          <div class="batch-tabs">
+            <button class="batch-tab-btn active" data-batch-provider="meta">Meta AI</button>
+            <button class="batch-tab-btn" data-batch-provider="grok">Grok AI</button>
+            <button class="batch-tab-btn" data-batch-provider="whisk">Whisk</button>
+            <button class="batch-tab-btn" data-batch-provider="imagefx">ImageFX</button>
+          </div>
+
+          <!-- Meta Tab -->
+          <div class="batch-tab-content active" id="batch-tab-meta">
+            <div class="batch-provider-info">
+              Meta AI supports: Image-to-Video, Text-to-Image, Text-to-Video
+            </div>
+            <div class="batch-tab-header">
+              <div class="batch-tab-header-actions">
+                <div class="template-dropdown">
+                  <button class="btn btn-secondary btn-sm btn-batch-templates" data-batch-provider="meta">Templates</button>
+                  <div class="template-menu" id="template-menu-meta">
+                    <button class="template-item" data-template="meta-i2v" data-provider="meta">Image to Video</button>
+                    <button class="template-item" data-template="meta-t2i" data-provider="meta">Text to Image</button>
+                    <button class="template-item" data-template="meta-t2v" data-provider="meta">Text to Video</button>
+                    <button class="template-item" data-template="meta-multi" data-provider="meta">Multiple Jobs</button>
+                  </div>
+                </div>
+                <button class="btn btn-secondary btn-sm btn-load-prompts" data-provider="meta">Load Prompts (.txt)</button>
+                <button class="btn btn-secondary btn-sm btn-load-json-provider" data-provider="meta">Load JSON</button>
+              </div>
+            </div>
+            <div class="json-editor-container">
+              <textarea class="json-editor" id="json-editor-meta" placeholder='Enter jobs for Meta AI (provider auto-added)...
+
+[
+  { "type": "text-to-image", "prompt": "A blue rose" },
+  { "type": "text-to-video", "prompt": "An eagle on a cliff", "options": { "animationPrompt": "Eagle takes flight" } },
+  { "type": "image-to-video", "prompt": "Zoom in", "image": "C:/path/to/image.jpg" }
+]'></textarea>
+            </div>
+            <div class="json-validation empty" id="json-validation-meta">
+              Enter jobs or load prompts to validate
+            </div>
+          </div>
+
+          <!-- Grok Tab -->
+          <div class="batch-tab-content" id="batch-tab-grok">
+            <div class="batch-provider-info">
+              Grok AI supports: Image-to-Video, Text-to-Video, Text-to-Image
+            </div>
+            <div class="batch-tab-header">
+              <div class="batch-tab-header-actions">
+                <div class="template-dropdown">
+                  <button class="btn btn-secondary btn-sm btn-batch-templates" data-batch-provider="grok">Templates</button>
+                  <div class="template-menu" id="template-menu-grok">
+                    <button class="template-item" data-template="grok-t2v" data-provider="grok">Text to Video</button>
+                    <button class="template-item" data-template="grok-t2i" data-provider="grok">Text to Image</button>
+                    <button class="template-item" data-template="grok-multi" data-provider="grok">Multiple Jobs</button>
+                  </div>
+                </div>
+                <button class="btn btn-secondary btn-sm btn-load-prompts" data-provider="grok">Load Prompts (.txt)</button>
+                <button class="btn btn-secondary btn-sm btn-load-json-provider" data-provider="grok">Load JSON</button>
+              </div>
+            </div>
+            <div class="json-editor-container">
+              <textarea class="json-editor" id="json-editor-grok" placeholder='Enter jobs for Grok AI (provider auto-added)...
+
+[
+  { "type": "text-to-video", "prompt": "Eagle soaring over mountains" },
+  { "type": "text-to-image", "prompt": "An ancient temple in fog" }
+]'></textarea>
+            </div>
+            <div class="json-validation empty" id="json-validation-grok">
+              Enter jobs or load prompts to validate
+            </div>
+          </div>
+
+          <!-- Whisk Tab -->
+          <div class="batch-tab-content" id="batch-tab-whisk">
+            <div class="batch-provider-info">
+              Google Whisk supports: Image-to-Video, Text-to-Image
+            </div>
+            <div class="batch-tab-header">
+              <div class="batch-tab-header-actions">
+                <div class="template-dropdown">
+                  <button class="btn btn-secondary btn-sm btn-batch-templates" data-batch-provider="whisk">Templates</button>
+                  <div class="template-menu" id="template-menu-whisk">
+                    <button class="template-item" data-template="whisk-i2v" data-provider="whisk">Image to Video</button>
+                    <button class="template-item" data-template="whisk-t2i" data-provider="whisk">Text to Image</button>
+                    <button class="template-item" data-template="whisk-multi" data-provider="whisk">Multiple Jobs</button>
+                  </div>
+                </div>
+                <button class="btn btn-secondary btn-sm btn-load-prompts" data-provider="whisk">Load Prompts (.txt)</button>
+                <button class="btn btn-secondary btn-sm btn-load-json-provider" data-provider="whisk">Load JSON</button>
+              </div>
+            </div>
+            <div class="json-editor-container">
+              <textarea class="json-editor" id="json-editor-whisk" placeholder='Enter jobs for Whisk (provider auto-added)...
+
+[
+  { "type": "text-to-image", "prompt": "A magical forest at dawn" },
+  { "type": "image-to-video", "prompt": "Pan left", "image": "C:/path/to/image.jpg" }
+]'></textarea>
+            </div>
+            <div class="json-validation empty" id="json-validation-whisk">
+              Enter jobs or load prompts to validate
+            </div>
+          </div>
+
+          <!-- ImageFX Tab -->
+          <div class="batch-tab-content" id="batch-tab-imagefx">
+            <div class="batch-provider-info">
+              Google ImageFX supports: Text-to-Image (Imagen 3 / 3.5 / 4)
+            </div>
+            <div class="batch-tab-header">
+              <div class="batch-tab-header-actions">
+                <div class="template-dropdown">
+                  <button class="btn btn-secondary btn-sm btn-batch-templates" data-batch-provider="imagefx">Templates</button>
+                  <div class="template-menu" id="template-menu-imagefx">
+                    <button class="template-item" data-template="imagefx-t2i" data-provider="imagefx">Text to Image</button>
+                    <button class="template-item" data-template="imagefx-multi" data-provider="imagefx">Multiple Jobs</button>
+                  </div>
+                </div>
+                <button class="btn btn-secondary btn-sm btn-load-prompts" data-provider="imagefx">Load Prompts (.txt)</button>
+                <button class="btn btn-secondary btn-sm btn-load-json-provider" data-provider="imagefx">Load JSON</button>
+              </div>
+            </div>
+            <div class="json-editor-container">
+              <textarea class="json-editor" id="json-editor-imagefx" placeholder='Enter jobs for ImageFX (provider auto-added)...
+
+[
+  { "type": "text-to-image", "prompt": "A cyberpunk street scene", "options": { "model": "IMAGEN_4" } },
+  { "type": "text-to-image", "prompt": "A serene lake at sunset" }
+]'></textarea>
+            </div>
+            <div class="json-validation empty" id="json-validation-imagefx">
+              Enter jobs or load prompts to validate
+            </div>
+          </div>
+        </div>
+
+        <!-- Batch Progress -->
+        <div class="card" id="batch-progress-card" style="display: none;">
+          <div class="card-header">
+            <div class="card-title">Batch Progress</div>
+            <button class="btn btn-danger btn-sm" id="btn-cancel-batch">Cancel All</button>
+          </div>
+
+          <div class="batch-overview" id="batch-overview">
+            <div class="batch-stat">
+              <div class="batch-stat-value" id="batch-completed">0</div>
+              <div class="batch-stat-label">Completed</div>
+            </div>
+            <div class="batch-stat">
+              <div class="batch-stat-value" id="batch-failed">0</div>
+              <div class="batch-stat-label">Failed</div>
+            </div>
+            <div class="batch-stat">
+              <div class="batch-stat-value" id="batch-total">0</div>
+              <div class="batch-stat-label">Total</div>
+            </div>
+          </div>
+
+          <div class="progress-container active" id="batch-jobs-progress">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px;">
+          <button class="btn btn-primary" id="btn-run-batch">Run Batch</button>
+        </div>
+      </div>
+
+      <!-- ============ HISTORY TAB ============ -->
+      <div class="tab-page" id="tab-history">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Generation History</div>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="history-search" placeholder="Search..." style="width: 200px;">
+              <select id="history-filter" style="width: 140px;">
+                <option value="all">All Status</option>
+                <option value="success">Success</option>
+                <option value="failed">Failed</option>
+                <option value="running">Running</option>
+              </select>
+              <button class="btn btn-danger btn-sm" id="btn-clear-history">Clear All</button>
+            </div>
+          </div>
+
+          <div class="history-list" id="history-list">
+            <div class="empty-state">
+              <div class="empty-state-icon">&#128247;</div>
+              <div class="empty-state-title">No generations yet</div>
+              <div class="empty-state-desc">Start generating to see your history here</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ SETTINGS TAB ============ -->
+      <div class="tab-page" id="tab-settings">
+        <!-- Meta Cookies -->
+        <div class="card">
+          <div class="settings-section">
+            <div class="settings-section-title">
+              <span style="color: var(--meta-color);">&#127760;</span> Meta AI Cookies
+            </div>
+            <div class="cookie-row">
+              <div class="form-group">
+                <label class="form-label">datr</label>
+                <input type="password" id="cookie-meta-datr" placeholder="Enter datr cookie value">
+              </div>
+              <div class="form-group">
+                <label class="form-label">abra_sess</label>
+                <input type="password" id="cookie-meta-abra_sess" placeholder="Enter abra_sess cookie value">
+              </div>
+              <button class="btn btn-secondary btn-sm" id="btn-validate-meta">Validate</button>
+            </div>
+            <div class="validate-result" id="validate-meta"></div>
+          </div>
+        </div>
+
+        <!-- Grok Cookies -->
+        <div class="card">
+          <div class="settings-section">
+            <div class="settings-section-title">
+              <span style="color: var(--grok-color);">&#9889;</span> Grok AI Cookies
+            </div>
+            <div class="cookie-row">
+              <div class="form-group">
+                <label class="form-label">sso</label>
+                <input type="password" id="cookie-grok-sso" placeholder="Enter sso cookie value">
+              </div>
+              <div class="form-group">
+                <label class="form-label">sso-rw</label>
+                <input type="password" id="cookie-grok-sso-rw" placeholder="Enter sso-rw cookie value">
+              </div>
+              <button class="btn btn-secondary btn-sm" id="btn-validate-grok">Validate</button>
+            </div>
+            <div class="validate-result" id="validate-grok"></div>
+          </div>
+        </div>
+
+        <!-- Whisk Cookies -->
+        <div class="card">
+          <div class="settings-section">
+            <div class="settings-section-title">
+              <span style="color: var(--whisk-color);">&#127912;</span> Google Whisk Cookies
+            </div>
+            <div class="cookie-row">
+              <div class="form-group">
+                <label class="form-label">Cookie String</label>
+                <input type="password" id="cookie-whisk-cookies" placeholder="Paste full cookie string from browser">
+              </div>
+              <button class="btn btn-secondary btn-sm" id="btn-validate-whisk">Validate</button>
+            </div>
+            <div class="validate-result" id="validate-whisk"></div>
+          </div>
+        </div>
+
+        <!-- ImageFX Cookies -->
+        <div class="card">
+          <div class="settings-section">
+            <div class="settings-section-title">
+              <span style="color: var(--imagefx-color);">&#10024;</span> Google ImageFX Auth
+            </div>
+            <div class="cookie-row">
+              <div class="form-group">
+                <label class="form-label">Cookie String</label>
+                <input type="password" id="cookie-imagefx-cookies" placeholder="Paste full cookie string from labs.google">
+              </div>
+              <button class="btn btn-secondary btn-sm" id="btn-validate-imagefx">Validate</button>
+            </div>
+            <div class="validate-result" id="validate-imagefx"></div>
+            <div style="margin-top: 8px; font-size: 11px; color: var(--text-muted);">
+              Get cookies from labs.google/fx → DevTools → Application → Cookies → copy all as string
+            </div>
+          </div>
+        </div>
+
+        <!-- Global Settings -->
+        <div class="card">
+          <div class="settings-section">
+            <div class="settings-section-title">
+              &#9881; Global Settings
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Default Output Folder</label>
+                <div style="display: flex; gap: 8px;">
+                  <input type="text" id="settings-output-folder" placeholder="Default output folder" readonly>
+                  <button class="btn btn-secondary btn-sm" id="btn-settings-folder">Browse</button>
+                </div>
+              </div>
+            </div>
+            <div class="form-row" style="margin-top: 12px;">
+              <div class="form-group">
+                <label class="form-label">Retry Attempts</label>
+                <select id="settings-retry">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3" selected>3</option>
+                  <option value="5">5</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Delay Between Jobs (seconds)</label>
+                <select id="settings-delay">
+                  <option value="5">5</option>
+                  <option value="10" selected>10</option>
+                  <option value="15">15</option>
+                  <option value="30">30</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Naming Pattern</label>
+                <input type="text" id="settings-naming" value="{provider}_{index}_{timestamp}" placeholder="{provider}_{index}_{timestamp}">
+              </div>
+            </div>
+            <div style="margin-top: 16px;">
+              <button class="btn btn-primary" id="btn-save-settings">Save Settings</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

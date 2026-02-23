@@ -1,0 +1,26 @@
+appId: com.shahzaib.ai-video-generator
+productName: AI Video Generator
+copyright: Copyright © 2026 shahzaib
+
+directories:
+  output: dist
+
+files:
+  - src/**/*
+  - assets/**/*
+  - package.json
+
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+  icon: assets/icon.ico
+  signAndEditExecutable: false
+
+portable:
+  artifactName: "${productName}-${version}-portable.exe"
+
+asar: true
+
+extraResources: []
