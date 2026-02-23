@@ -292,14 +292,12 @@ class GrokConverter {
           const count = await dropdowns.count();
           for (let i = 0; i < count; i++) {
             const dropdown = dropdowns.nth(i);
-            if (await dropdown.isVisible()) {
-              const box = await dropdown.boundingBox();
-              if (box && box.y > 300) {
-                await dropdown.click();
-                dropdownClicked = true;
-                await this.page.waitForTimeout(1000);
-                break;
-              }
+            const box = await dropdown.boundingBox().catch(() => null);
+            if (box && box.y > 300) {
+              await dropdown.click({ force: true });
+              dropdownClicked = true;
+              await this.page.waitForTimeout(1000);
+              break;
             }
           }
           if (dropdownClicked) break;
@@ -324,10 +322,11 @@ class GrokConverter {
           const count = await elements.count();
           for (let i = 0; i < count; i++) {
             const el = elements.nth(i);
-            if (await el.isVisible()) {
+            const box = await el.boundingBox().catch(() => null);
+            if (box) {
               const text = await el.textContent().catch(() => '');
               if (text.includes('browser does not support')) continue;
-              await el.click();
+              await el.click({ force: true });
               console.log('[GROK] Video mode selected');
               await this.page.waitForTimeout(500);
               return true;
@@ -364,15 +363,13 @@ class GrokConverter {
           const count = await buttons.count();
           for (let i = 0; i < count; i++) {
             const btn = buttons.nth(i);
-            if (await btn.isVisible()) {
-              const box = await btn.boundingBox();
-              // Target the bottom bar button (y > 500), not any other "Image"/"Video" text
-              if (box && box.y > 500) {
-                await btn.click();
-                await this.page.waitForTimeout(800);
-                console.log('[GROK] Settings popup opened');
-                return true;
-              }
+            const box = await btn.boundingBox().catch(() => null);
+            // Target the bottom bar button (y > 500), not any other "Image"/"Video" text
+            if (box && box.y > 500) {
+              await btn.click({ force: true });
+              await this.page.waitForTimeout(800);
+              console.log('[GROK] Settings popup opened');
+              return true;
             }
           }
         } catch (e) { continue; }
@@ -408,7 +405,7 @@ class GrokConverter {
 
       // Try direct aria-label match first
       const button = this.page.locator(`[aria-label="${ratio}"]`).first();
-      if (await button.count() > 0 && await button.isVisible()) {
+      if (await button.count() > 0) {
         await button.click({ force: true });
         console.log(`[GROK] Aspect ratio ${ratio} selected via aria-label`);
         await this._closeSettingsPopup();
@@ -422,8 +419,8 @@ class GrokConverter {
       for (const sel of textSelectors) {
         try {
           const el = this.page.locator(sel).first();
-          if (await el.count() > 0 && await el.isVisible()) {
-            await el.click();
+          if (await el.count() > 0) {
+            await el.click({ force: true });
             console.log(`[GROK] Aspect ratio ${ratio} selected via text`);
             await this._closeSettingsPopup();
             return true;
@@ -431,6 +428,7 @@ class GrokConverter {
         } catch (e) { continue; }
       }
 
+      console.log(`[GROK] Could not find aspect ratio ${ratio} in popup`);
       await this._closeSettingsPopup();
       return false;
     } catch (e) {
@@ -450,24 +448,20 @@ class GrokConverter {
 
       // Look for duration button by text (e.g. "6s" or "10s")
       const selectors = [
+        `[aria-label="${duration}"]`,
         `button:has-text("${duration}")`,
         `span:text-is("${duration}")`,
-        `div:text-is("${duration}")`,
-        `[aria-label="${duration}"]`
+        `div:text-is("${duration}")`
       ];
 
       for (const sel of selectors) {
         try {
-          const elements = this.page.locator(sel);
-          const count = await elements.count();
-          for (let i = 0; i < count; i++) {
-            const el = elements.nth(i);
-            if (await el.isVisible()) {
-              await el.click();
-              console.log(`[GROK] Video duration ${duration} selected`);
-              await this._closeSettingsPopup();
-              return true;
-            }
+          const el = this.page.locator(sel).first();
+          if (await el.count() > 0) {
+            await el.click({ force: true });
+            console.log(`[GROK] Video duration ${duration} selected`);
+            await this._closeSettingsPopup();
+            return true;
           }
         } catch (e) { continue; }
       }
@@ -491,24 +485,20 @@ class GrokConverter {
 
       // Look for resolution button by text (e.g. "480p" or "720p")
       const selectors = [
+        `[aria-label="${resolution}"]`,
         `button:has-text("${resolution}")`,
         `span:text-is("${resolution}")`,
-        `div:text-is("${resolution}")`,
-        `[aria-label="${resolution}"]`
+        `div:text-is("${resolution}")`
       ];
 
       for (const sel of selectors) {
         try {
-          const elements = this.page.locator(sel);
-          const count = await elements.count();
-          for (let i = 0; i < count; i++) {
-            const el = elements.nth(i);
-            if (await el.isVisible()) {
-              await el.click();
-              console.log(`[GROK] Video resolution ${resolution} selected`);
-              await this._closeSettingsPopup();
-              return true;
-            }
+          const el = this.page.locator(sel).first();
+          if (await el.count() > 0) {
+            await el.click({ force: true });
+            console.log(`[GROK] Video resolution ${resolution} selected`);
+            await this._closeSettingsPopup();
+            return true;
           }
         } catch (e) { continue; }
       }
