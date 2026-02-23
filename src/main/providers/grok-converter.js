@@ -525,65 +525,78 @@ class GrokConverter {
   async _typePrompt(prompt) {
     console.log(`[GROK] Typing prompt: "${prompt.substring(0, 50)}${prompt.length > 50 ? '...' : ''}"`);
 
+    // Wait for page to have a textarea in the DOM (up to 20s)
+    try {
+      await this.page.waitForSelector('textarea', { timeout: 20000 });
+      console.log('[GROK] Textarea found in DOM');
+    } catch (e) {
+      // Log page diagnostics to understand what's on screen
+      const diag = await this.page.evaluate(() => ({
+        url: window.location.href,
+        title: document.title,
+        textareas: document.querySelectorAll('textarea').length,
+        inputs: document.querySelectorAll('input').length,
+        editables: document.querySelectorAll('[contenteditable="true"]').length,
+        bodyText: document.body?.innerText?.substring(0, 300) || ''
+      })).catch(() => ({ url: '?', title: '?', textareas: 0, inputs: 0, editables: 0, bodyText: '' }));
+      console.log(`[GROK] No textarea after 20s! URL: ${diag.url} | Title: ${diag.title}`);
+      console.log(`[GROK] DOM: ${diag.textareas} textareas, ${diag.inputs} inputs, ${diag.editables} editables`);
+      console.log(`[GROK] Page text: ${diag.bodyText.substring(0, 200)}`);
+    }
+
+    // Try React native setter directly via evaluate (bypasses Playwright visibility check)
+    const reactSet = await this.page.evaluate((text) => {
+      // Find the first textarea on the page
+      const ta = document.querySelector('textarea');
+      if (!ta) return { ok: false, reason: 'no textarea' };
+      try {
+        ta.focus();
+        const nativeSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype, 'value'
+        ).set;
+        nativeSetter.call(ta, text);
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        ta.dispatchEvent(new Event('change', { bubbles: true }));
+        return { ok: ta.value === text, reason: 'set' };
+      } catch (e) {
+        return { ok: false, reason: e.message };
+      }
+    }, prompt).catch(e => ({ ok: false, reason: e.message }));
+
+    if (reactSet.ok) {
+      console.log('[GROK] Prompt set via React native setter (direct)');
+      await this.page.waitForTimeout(500);
+      return true;
+    }
+    console.log(`[GROK] Direct React setter failed: ${reactSet.reason}`);
+
+    // Fallback: try specific selectors with Playwright interaction (no visibility check)
     const inputSelectors = [
       'textarea[placeholder="Type to imagine"]',
       'textarea[aria-label="Ask Grok anything"]',
       'textarea[placeholder*="imagine" i]',
       'textarea[placeholder*="type" i]',
       'textarea[placeholder*="customiz" i]',
-      'div[contenteditable="true"]',
-      'textarea'
+      'textarea',
+      'div[contenteditable="true"]'
     ];
-
-    // Wait for any textarea to appear (headless mode can be slow to render)
-    let inputReady = false;
-    for (let wait = 0; wait < 15; wait++) {
-      for (const selector of inputSelectors) {
-        try {
-          const input = this.page.locator(selector).first();
-          if (await input.count() > 0 && await input.isVisible()) {
-            inputReady = true;
-            break;
-          }
-        } catch (e) { continue; }
-      }
-      if (inputReady) break;
-      console.log(`[GROK] Waiting for text input... (${wait + 1}s)`);
-      await this.page.waitForTimeout(1000);
-    }
 
     for (const selector of inputSelectors) {
       try {
         const input = this.page.locator(selector).first();
-        if (await input.count() > 0 && await input.isVisible()) {
-          // React native value setter
-          const reactSet = await this.page.evaluate(({ sel, text }) => {
-            const el = document.querySelector(sel);
-            if (!el) return false;
-            el.focus();
-            const nativeSetter = Object.getOwnPropertyDescriptor(
-              window.HTMLTextAreaElement.prototype, 'value'
-            ).set;
-            nativeSetter.call(el, text);
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-            return el.value === text;
-          }, { sel: selector, text: prompt });
-
-          if (reactSet) {
-            console.log('[GROK] Prompt set via React native setter');
-            await this.page.waitForTimeout(500);
-            return true;
+        if (await input.count() > 0) {
+          // Try click + keyboard type
+          try {
+            await input.click({ force: true, timeout: 3000 });
+          } catch (e) {
+            await input.focus().catch(() => {});
           }
-
-          // Fallback: keyboard type
-          await input.click();
           await this.page.waitForTimeout(300);
           await this.page.keyboard.press('Control+a');
           await this.page.keyboard.press('Backspace');
           await this.page.waitForTimeout(200);
           await this.page.keyboard.type(prompt, { delay: 30 });
-          console.log('[GROK] Prompt typed via keyboard');
+          console.log(`[GROK] Prompt typed via keyboard (${selector})`);
           await this.page.waitForTimeout(500);
           return true;
         }
