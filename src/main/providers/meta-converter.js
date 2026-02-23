@@ -1430,7 +1430,19 @@ class MetaConverter {
         }
       }
 
-      // Step 3: Click create/submit button
+      // Step 3: Snapshot existing images (gallery content) BEFORE submitting
+      const existingImageUrls = new Set();
+      try {
+        const existingImgs = page.locator('img[src*="scontent"], img[src*="fbcdn.net"], img[src*="lookaside"]');
+        const existingCount = await existingImgs.count();
+        for (let i = 0; i < existingCount; i++) {
+          const src = await existingImgs.nth(i).getAttribute('src');
+          if (src) existingImageUrls.add(src.split('?')[0]);
+        }
+        console.log(`${tag} Snapshotted ${existingImageUrls.size} pre-existing gallery images`);
+      } catch (e) {}
+
+      // Step 4: Click create/submit button
       update('Generating image...', 45);
       const submitBtn = page.locator('[data-testid="composer-create-button"]').first();
       if (await submitBtn.count() > 0) {
@@ -1461,7 +1473,7 @@ class MetaConverter {
       }
       await page.waitForTimeout(3000);
 
-      // Step 4: Wait for generated image in first article
+      // Step 5: Wait for generated image in first article
       console.log(`${tag} Waiting for image...`);
 
       const maxWaitMs = 120000; // 2 minutes
@@ -1479,13 +1491,18 @@ class MetaConverter {
             const img = imgs.nth(i);
             const src = await img.getAttribute('src');
             if (!src) continue;
+
+            // Skip pre-existing gallery images
+            const baseUrl = src.split('?')[0];
+            if (existingImageUrls.has(baseUrl)) continue;
+
             const dims = await img.evaluate(el => ({
               w: el.naturalWidth || el.width,
               h: el.naturalHeight || el.height
             }));
             if (dims.w > 400 && dims.h > 400) {
               imageUrl = src;
-              console.log(`${tag} Found image: ${dims.w}x${dims.h} — ${src.substring(0, 80)}...`);
+              console.log(`${tag} Found NEW image: ${dims.w}x${dims.h} — ${src.substring(0, 80)}...`);
               break;
             }
           }
@@ -1502,7 +1519,7 @@ class MetaConverter {
 
       if (!imageUrl) throw new Error('Timeout — no image detected after 2 minutes');
 
-      // Step 5: Download image
+      // Step 6: Download image
       update('Downloading image...', 90);
       console.log(`${tag} Downloading to ${path.basename(outputPath)}...`);
 

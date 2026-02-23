@@ -4,14 +4,15 @@ const path = require('path');
 /**
  * ImageFX Converter - Google ImageFX API-based converter
  * Uses @rohitaryal/imagefx-api (ESM package, loaded via dynamic import)
- * Supports: Text-to-Image only (Imagen 3 / 3.5 / 4)
+ * Supports: Text-to-Image only (Imagen 3.5)
  */
 class ImageFXConverter {
   constructor(cookies, options = {}) {
     this.cookies = cookies; // { cookies: 'google auth cookie string' }
     this.retryAttempts = options.retryAttempts || 3;
     this._running = false;
-    this._imagefx = null; // Lazy-loaded ESM module instance
+    this._imagefx = null;     // Lazy-loaded ImageFX instance
+    this._PromptClass = null; // Prompt class for structured prompts
   }
 
   isRunning() {
@@ -27,8 +28,9 @@ class ImageFXConverter {
     if (this._imagefx) return this._imagefx;
 
     // Dynamic import for ESM package in CJS context
-    const { ImageFX } = await import('@rohitaryal/imagefx-api');
-    this._imagefx = new ImageFX(this.cookies.cookies);
+    const mod = await import('@rohitaryal/imagefx-api');
+    this._PromptClass = mod.Prompt;
+    this._imagefx = new mod.ImageFX(this.cookies.cookies);
     return this._imagefx;
   }
 
@@ -44,17 +46,17 @@ class ImageFXConverter {
   async stop() {
     this._running = false;
     this._imagefx = null;
+    this._PromptClass = null;
     console.log('[IMAGEFX] Stopped');
   }
 
   async validateSession() {
     try {
       const client = await this._getClient();
-      // Generate a tiny test to confirm auth works
-      const results = await client.generate('test image', { numImages: 1 });
-      const valid = results && results.length > 0;
-      console.log('[IMAGEFX] Session', valid ? 'valid' : 'invalid');
-      return valid;
+      // Refresh session to verify cookies are valid (doesn't consume a generation)
+      await client.account.refreshSession();
+      console.log('[IMAGEFX] Session valid');
+      return true;
     } catch (e) {
       console.log('[IMAGEFX] Validation failed:', e.message);
       return false;
@@ -69,10 +71,10 @@ class ImageFXConverter {
   }
 
   /**
-   * Text-to-Image using ImageFX (Imagen models)
+   * Text-to-Image using ImageFX (Imagen 3.5)
    */
   async textToImage(prompt, outputPath, options = {}) {
-    const { aspectRatio = '1:1', model = 'IMAGEN_3_5', progressCallback } = options;
+    const { aspectRatio = '1:1', progressCallback } = options;
     const result = { success: false, imageUrl: null, outputPath, error: null, attempts: 0 };
     const update = (stage, percent) => { if (progressCallback) progressCallback(stage, percent); };
 
@@ -84,14 +86,6 @@ class ImageFXConverter {
     };
     const fxRatio = ratioMap[aspectRatio] || 'IMAGE_ASPECT_RATIO_SQUARE';
 
-    // Map model names to ImageFX enum
-    const modelMap = {
-      'IMAGEN_3': 'IMAGEN_3',
-      'IMAGEN_3_5': 'IMAGEN_3_5',
-      'IMAGEN_4': 'IMAGEN_4'
-    };
-    const fxModel = modelMap[model] || 'IMAGEN_3_5';
-
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
       if (!this._running) break;
       result.attempts = attempt;
@@ -101,15 +95,18 @@ class ImageFXConverter {
 
         update('Submitting to ImageFX...', 20);
         const client = await this._getClient();
+        const Prompt = this._PromptClass;
 
-        const generateOptions = {
+        // Create structured prompt with aspect ratio
+        const promptObj = new Prompt({
+          prompt,
           aspectRatio: fxRatio,
-          model: fxModel,
-          numImages: 1
-        };
+          numberOfImages: 1,
+          generationModel: 'IMAGEN_3_5'
+        });
 
         update('Generating image...', 40);
-        const images = await client.generate(prompt, generateOptions);
+        const images = await client.generateImage(promptObj);
 
         if (!images || images.length === 0) {
           throw new Error('No images returned from ImageFX');
@@ -121,31 +118,12 @@ class ImageFXConverter {
         const dir = path.dirname(outputPath);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-        // The API returns image data (Buffer or base64)
-        const imageData = images[0];
-        if (Buffer.isBuffer(imageData)) {
-          fs.writeFileSync(outputPath, imageData);
-        } else if (typeof imageData === 'string') {
-          // Base64 string
-          const base64Clean = imageData.replace(/^data:image\/\w+;base64,/, '');
-          fs.writeFileSync(outputPath, Buffer.from(base64Clean, 'base64'));
-        } else if (imageData.data) {
-          // Object with data property
-          const data = Buffer.isBuffer(imageData.data)
-            ? imageData.data
-            : Buffer.from(imageData.data, 'base64');
-          fs.writeFileSync(outputPath, data);
-        } else if (imageData.url) {
-          // URL-based response
-          result.imageUrl = imageData.url;
-          const response = await fetch(imageData.url);
-          const buffer = Buffer.from(await response.arrayBuffer());
-          fs.writeFileSync(outputPath, buffer);
-        } else {
-          throw new Error('Unexpected image data format from ImageFX');
-        }
+        // Image.encodedImage is base64 string
+        const image = images[0];
+        const imageBuffer = Buffer.from(image.encodedImage, 'base64');
+        fs.writeFileSync(outputPath, imageBuffer);
 
-        const sizeMb = fs.statSync(outputPath).size / (1024 * 1024);
+        const sizeMb = imageBuffer.length / (1024 * 1024);
         console.log(`[IMAGEFX] Generated image (${sizeMb.toFixed(2)} MB)`);
 
         update('Complete!', 100);
