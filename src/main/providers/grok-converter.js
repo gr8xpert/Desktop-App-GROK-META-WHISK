@@ -525,8 +525,6 @@ class GrokConverter {
   async _typePrompt(prompt) {
     console.log(`[GROK] Typing prompt: "${prompt.substring(0, 50)}${prompt.length > 50 ? '...' : ''}"`);
 
-    await this.page.waitForTimeout(800);
-
     const inputSelectors = [
       'textarea[placeholder="Type to imagine"]',
       'textarea[aria-label="Ask Grok anything"]',
@@ -536,6 +534,23 @@ class GrokConverter {
       'div[contenteditable="true"]',
       'textarea'
     ];
+
+    // Wait for any textarea to appear (headless mode can be slow to render)
+    let inputReady = false;
+    for (let wait = 0; wait < 15; wait++) {
+      for (const selector of inputSelectors) {
+        try {
+          const input = this.page.locator(selector).first();
+          if (await input.count() > 0 && await input.isVisible()) {
+            inputReady = true;
+            break;
+          }
+        } catch (e) { continue; }
+      }
+      if (inputReady) break;
+      console.log(`[GROK] Waiting for text input... (${wait + 1}s)`);
+      await this.page.waitForTimeout(1000);
+    }
 
     for (const selector of inputSelectors) {
       try {
