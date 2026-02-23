@@ -103,7 +103,19 @@ body {
 /* ============ Main Layout ============ */
 .app-container {
   display: flex;
-  height: calc(100vh - 36px);
+  height: calc(100vh - 36px - 28px);
+}
+
+.app-footer {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.02);
+  border-top: 1px solid var(--border-color);
+  letter-spacing: 0.3px;
 }
 
 /* ============ Sidebar ============ */
