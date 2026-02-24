@@ -157,6 +157,7 @@ class GrokConverter {
     this.page = null;
     this.context = null;
     this.browser = null;
+    this._usedUrls.clear();
     console.log('[GROK] Closed.');
   }
 
@@ -179,11 +180,18 @@ class GrokConverter {
       if (this.page) await this.page.close().catch(() => {});
       this.page = newPage;
       await this.page.goto('https://grok.com/imagine', { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await this.page.waitForTimeout(2000);
     } catch (e) {
       await this.page.goto('https://grok.com/imagine', { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await this.page.waitForTimeout(2000);
     }
+    // Wait for page to be fully interactive (React hydrated, textarea rendered)
+    try {
+      await this.page.waitForSelector('textarea', { timeout: 20000 });
+      console.log('[GROK] Page ready (textarea found)');
+    } catch (e) {
+      console.log('[GROK] Textarea not found after 20s, waiting extra 5s...');
+      await this.page.waitForTimeout(5000);
+    }
+    await this.page.waitForTimeout(1000);
   }
 
   async _uploadImage(imagePath) {
@@ -201,9 +209,9 @@ class GrokConverter {
       }
     } catch (e) {}
 
-    // Method 2: Image button -> Upload menu
+    // Method 2: Upload menu trigger (avoid 'button:has-text("Image")' — it's the mode dropdown!)
     const triggerSelectors = [
-      'button:has-text("Image")', '[aria-haspopup="menu"]',
+      '[aria-haspopup="menu"]',
       'button[aria-expanded]', 'button:has(svg[viewBox])'
     ];
 
@@ -278,74 +286,137 @@ class GrokConverter {
   async _selectVideoMode() {
     console.log('[GROK] Selecting Video mode...');
 
-    try {
-      const dropdownSelectors = [
-        'button:has-text("Image"):near(textarea)',
-        'button:has-text("Image")',
-        '[aria-expanded]:has-text("Image")'
-      ];
-
-      let dropdownClicked = false;
-      for (const selector of dropdownSelectors) {
-        try {
-          const dropdowns = this.page.locator(selector);
-          const count = await dropdowns.count();
-          for (let i = 0; i < count; i++) {
-            const dropdown = dropdowns.nth(i);
-            const box = await dropdown.boundingBox().catch(() => null);
-            if (box && box.y > 300) {
-              await dropdown.click({ force: true });
-              dropdownClicked = true;
-              await this.page.waitForTimeout(1000);
-              break;
-            }
-          }
-          if (dropdownClicked) break;
-        } catch (e) { continue; }
+    // Try up to 2 times (page may need a moment to stabilize after first attempt)
+    for (let tryNum = 1; tryNum <= 2; tryNum++) {
+      if (tryNum > 1) {
+        console.log(`[GROK] Video mode retry #${tryNum}, waiting for page to stabilize...`);
+        await this.page.waitForTimeout(3000);
       }
 
-      if (!dropdownClicked) return false;
-
-      await this.page.waitForTimeout(500);
-
-      const videoSelectors = [
-        'div:has(> span:text-is("Video"))',
-        'label:has-text("Video"):has-text("Generate")',
-        'div:has-text("VideoGenerate a video")',
-        'input[type="radio"][value*="video" i]',
-        'span:text-is("Video")'
-      ];
-
-      for (const selector of videoSelectors) {
-        try {
-          const elements = this.page.locator(selector);
-          const count = await elements.count();
-          for (let i = 0; i < count; i++) {
-            const el = elements.nth(i);
-            const box = await el.boundingBox().catch(() => null);
-            if (box) {
-              const text = await el.textContent().catch(() => '');
-              if (text.includes('browser does not support')) continue;
-              await el.click({ force: true });
-              console.log('[GROK] Video mode selected');
-              await this.page.waitForTimeout(500);
-              return true;
-            }
+      try {
+        // Check if already in Video mode (bottom bar button says "Video")
+        const modeCheck = await this.page.evaluate(() => {
+          const buttons = document.querySelectorAll('button');
+          for (const btn of buttons) {
+            const text = (btn.textContent || '').trim();
+            const rect = btn.getBoundingClientRect();
+            if (rect.y > 400 && /^Video$/i.test(text)) return 'video';
+            if (rect.y > 400 && /^Image$/i.test(text)) return 'image';
           }
-        } catch (e) { continue; }
+          return 'unknown';
+        }).catch(() => 'unknown');
+
+        if (modeCheck === 'video') {
+          console.log('[GROK] Already in Video mode');
+          return true;
+        }
+        console.log(`[GROK] Current mode: ${modeCheck}`);
+
+        // STEP 1: Find and click the "Image" dropdown button in the bottom bar
+        const dropdownSelectors = [
+          'button:has-text("Image"):near(textarea)',
+          'button:has-text("Image")',
+          '[aria-expanded]:has-text("Image")'
+        ];
+
+        let dropdownClicked = false;
+        for (const selector of dropdownSelectors) {
+          try {
+            const dropdowns = this.page.locator(selector);
+            const count = await dropdowns.count();
+            for (let i = 0; i < count; i++) {
+              const dropdown = dropdowns.nth(i);
+              const box = await dropdown.boundingBox().catch(() => null);
+              if (box && box.y > 300) {
+                console.log(`[GROK] Found mode button at y=${Math.round(box.y)}, clicking...`);
+                await dropdown.click({ force: true });
+                dropdownClicked = true;
+                await this.page.waitForTimeout(1000);
+                break;
+              }
+            }
+            if (dropdownClicked) break;
+          } catch (e) { continue; }
+        }
+
+        if (!dropdownClicked) {
+          console.log('[GROK] Could not find mode dropdown button');
+          continue;
+        }
+
+        await this.page.waitForTimeout(500);
+
+        // STEP 2: Click "Video" option in the opened dropdown
+        const videoSelectors = [
+          'div:has(> span:text-is("Video"))',
+          'label:has-text("Video"):has-text("Generate")',
+          'div:has-text("VideoGenerate a video")',
+          'input[type="radio"][value*="video" i]',
+          'span:text-is("Video")',
+          '[role="option"]:has-text("Video")',
+          '[role="menuitem"]:has-text("Video")'
+        ];
+
+        let videoClicked = false;
+        for (const selector of videoSelectors) {
+          try {
+            const elements = this.page.locator(selector);
+            const count = await elements.count();
+            for (let i = 0; i < count; i++) {
+              const el = elements.nth(i);
+              const box = await el.boundingBox().catch(() => null);
+              if (box) {
+                const text = await el.textContent().catch(() => '');
+                if (text.includes('browser does not support')) continue;
+                console.log(`[GROK] Found Video option, clicking...`);
+                await el.click({ force: true });
+                videoClicked = true;
+                break;
+              }
+            }
+            if (videoClicked) break;
+          } catch (e) { continue; }
+        }
+
+        if (!videoClicked) {
+          // Keyboard fallback
+          await this.page.keyboard.press('ArrowUp');
+          await this.page.waitForTimeout(200);
+          await this.page.keyboard.press('Enter');
+          console.log('[GROK] Used keyboard fallback for video mode');
+        }
+
+        await this.page.waitForTimeout(1500);
+
+        // STEP 3: Verify it actually switched to Video mode
+        const afterCheck = await this.page.evaluate(() => {
+          const buttons = document.querySelectorAll('button');
+          for (const btn of buttons) {
+            const text = (btn.textContent || '').trim();
+            const rect = btn.getBoundingClientRect();
+            if (rect.y > 400 && /^Video$/i.test(text)) return 'video';
+            if (rect.y > 400 && /^Image$/i.test(text)) return 'image';
+          }
+          return 'unknown';
+        }).catch(() => 'unknown');
+
+        console.log(`[GROK] After selection, mode is: ${afterCheck}`);
+
+        if (afterCheck === 'video') {
+          console.log('[GROK] Video mode confirmed!');
+          return true;
+        }
+
+        // If still in Image mode, the page probably reset — try again
+        console.log('[GROK] Video mode did not stick, will retry...');
+
+      } catch (e) {
+        console.log('[GROK] Error selecting video mode:', e.message);
       }
-
-      // Keyboard fallback
-      await this.page.keyboard.press('ArrowUp');
-      await this.page.waitForTimeout(200);
-      await this.page.keyboard.press('Enter');
-      await this.page.waitForTimeout(500);
-      return false;
-
-    } catch (e) {
-      console.log('[GROK] Error selecting video mode:', e.message);
-      return false;
     }
+
+    console.log('[GROK] WARNING: Could not confirm Video mode after retries');
+    return false;
   }
 
   async _openSettingsPopup() {
@@ -515,72 +586,83 @@ class GrokConverter {
   async _typePrompt(prompt) {
     console.log(`[GROK] Typing prompt: "${prompt.substring(0, 50)}${prompt.length > 50 ? '...' : ''}"`);
 
-    // Wait for page to have a textarea in the DOM (up to 20s)
-    try {
-      await this.page.waitForSelector('textarea', { timeout: 20000 });
-      console.log('[GROK] Textarea found in DOM');
-    } catch (e) {
-      // Log page diagnostics to understand what's on screen
-      const diag = await this.page.evaluate(() => ({
-        url: window.location.href,
-        title: document.title,
-        textareas: document.querySelectorAll('textarea').length,
-        inputs: document.querySelectorAll('input').length,
-        editables: document.querySelectorAll('[contenteditable="true"]').length,
-        bodyText: document.body?.innerText?.substring(0, 300) || ''
-      })).catch(() => ({ url: '?', title: '?', textareas: 0, inputs: 0, editables: 0, bodyText: '' }));
-      console.log(`[GROK] No textarea after 20s! URL: ${diag.url} | Title: ${diag.title}`);
-      console.log(`[GROK] DOM: ${diag.textareas} textareas, ${diag.inputs} inputs, ${diag.editables} editables`);
-      console.log(`[GROK] Page text: ${diag.bodyText.substring(0, 200)}`);
-    }
+    // Grok uses a ProseMirror contenteditable div (NOT a textarea) for the prompt input.
+    // The textarea in the DOM is hidden — setting its value does nothing visible.
+    // We must click the ProseMirror div and type via keyboard.
 
-    // Try React native setter directly via evaluate (bypasses Playwright visibility check)
-    const reactSet = await this.page.evaluate((text) => {
-      // Find the first textarea on the page
-      const ta = document.querySelector('textarea');
-      if (!ta) return { ok: false, reason: 'no textarea' };
-      try {
-        ta.focus();
-        const nativeSetter = Object.getOwnPropertyDescriptor(
-          window.HTMLTextAreaElement.prototype, 'value'
-        ).set;
-        nativeSetter.call(ta, text);
-        ta.dispatchEvent(new Event('input', { bubbles: true }));
-        ta.dispatchEvent(new Event('change', { bubbles: true }));
-        return { ok: ta.value === text, reason: 'set' };
-      } catch (e) {
-        return { ok: false, reason: e.message };
-      }
-    }, prompt).catch(e => ({ ok: false, reason: e.message }));
-
-    if (reactSet.ok) {
-      console.log('[GROK] Prompt set via React native setter (direct)');
-      await this.page.waitForTimeout(500);
-      return true;
-    }
-    console.log(`[GROK] Direct React setter failed: ${reactSet.reason}`);
-
-    // Fallback: try specific selectors with Playwright interaction (no visibility check)
-    const inputSelectors = [
-      'textarea[placeholder="Type to imagine"]',
-      'textarea[aria-label="Ask Grok anything"]',
-      'textarea[placeholder*="imagine" i]',
-      'textarea[placeholder*="type" i]',
-      'textarea[placeholder*="customiz" i]',
-      'textarea',
+    // Strategy 1: ProseMirror contenteditable div (the actual visible input)
+    const proseMirrorSelectors = [
+      'div.ProseMirror[contenteditable="true"]',
+      'div.tiptap[contenteditable="true"]',
+      '[contenteditable="true"][class*="ProseMirror"]',
+      '[contenteditable="true"][class*="tiptap"]',
       'div[contenteditable="true"]'
     ];
 
-    for (const selector of inputSelectors) {
+    for (const selector of proseMirrorSelectors) {
+      try {
+        const el = this.page.locator(selector).first();
+        if (await el.count() > 0) {
+          // Click to focus the editor
+          await el.click({ force: true, timeout: 3000 });
+          await this.page.waitForTimeout(300);
+          // Clear any existing content
+          await this.page.keyboard.press('Control+a');
+          await this.page.keyboard.press('Backspace');
+          await this.page.waitForTimeout(200);
+          // Type the prompt
+          await this.page.keyboard.type(prompt, { delay: 20 });
+          await this.page.waitForTimeout(500);
+
+          // Verify text was entered
+          const content = await el.textContent().catch(() => '');
+          if (content.includes(prompt.substring(0, 20))) {
+            console.log(`[GROK] Prompt typed via ProseMirror (${selector})`);
+            return true;
+          }
+          console.log(`[GROK] ProseMirror type attempted but content: "${content.substring(0, 50)}"`);
+        }
+      } catch (e) {
+        console.log(`[GROK] ProseMirror selector "${selector}" failed: ${e.message}`);
+        continue;
+      }
+    }
+
+    // Strategy 2: Try textarea with React native setter (older Grok versions)
+    try {
+      const ta = this.page.locator('textarea').first();
+      if (await ta.count() > 0 && await ta.isVisible().catch(() => false)) {
+        const reactSet = await this.page.evaluate((text) => {
+          const ta = document.querySelector('textarea');
+          if (!ta) return { ok: false, reason: 'no textarea' };
+          try {
+            ta.focus();
+            const nativeSetter = Object.getOwnPropertyDescriptor(
+              window.HTMLTextAreaElement.prototype, 'value'
+            ).set;
+            nativeSetter.call(ta, text);
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+            ta.dispatchEvent(new Event('change', { bubbles: true }));
+            return { ok: ta.value === text, reason: 'set' };
+          } catch (e) {
+            return { ok: false, reason: e.message };
+          }
+        }, prompt).catch(e => ({ ok: false, reason: e.message }));
+
+        if (reactSet.ok) {
+          console.log('[GROK] Prompt set via React native setter');
+          await this.page.waitForTimeout(500);
+          return true;
+        }
+      }
+    } catch (e) {}
+
+    // Strategy 3: Click any input-like element and type
+    for (const selector of ['textarea', 'input[type="text"]']) {
       try {
         const input = this.page.locator(selector).first();
         if (await input.count() > 0) {
-          // Try click + keyboard type
-          try {
-            await input.click({ force: true, timeout: 3000 });
-          } catch (e) {
-            await input.focus().catch(() => {});
-          }
+          await input.click({ force: true, timeout: 3000 }).catch(() => input.focus());
           await this.page.waitForTimeout(300);
           await this.page.keyboard.press('Control+a');
           await this.page.keyboard.press('Backspace');
@@ -593,6 +675,7 @@ class GrokConverter {
       } catch (e) { continue; }
     }
 
+    console.log('[GROK] ERROR: Could not find any input to type prompt');
     return false;
   }
 
@@ -939,7 +1022,10 @@ class GrokConverter {
         }
 
         update('Selecting video mode...', 10);
-        await this._selectVideoMode();
+        const videoModeOk = await this._selectVideoMode();
+        if (!videoModeOk) {
+          console.log('[GROK] WARNING: Video mode selection uncertain — proceeding anyway');
+        }
 
         if (aspectRatio && aspectRatio !== '9:16') {
           update('Selecting aspect ratio...', 12);
@@ -1020,26 +1106,30 @@ class GrokConverter {
       }
 
       update('Selecting video mode...', 10);
-      await this._selectVideoMode();
+      const videoModeOk = await this._selectVideoMode();
+      if (!videoModeOk) {
+        console.log('[GROK] WARNING: Video mode selection uncertain — proceeding anyway');
+      }
+
+      // Type prompt BEFORE settings popups (popup Escape keys break textarea React state)
+      update('Entering prompt...', 12);
+      if (!await this._typePrompt(prompt)) {
+        throw new Error('Could not find text input field');
+      }
 
       if (aspectRatio && aspectRatio !== '9:16') {
-        update('Selecting aspect ratio...', 12);
+        update('Selecting aspect ratio...', 14);
         await this._selectAspectRatio(aspectRatio);
       }
 
       if (duration) {
-        update('Selecting video duration...', 13);
+        update('Selecting video duration...', 15);
         await this._selectVideoDuration(duration);
       }
 
       if (resolution) {
-        update('Selecting video resolution...', 14);
+        update('Selecting video resolution...', 16);
         await this._selectVideoResolution(resolution);
-      }
-
-      update('Entering prompt...', 15);
-      if (!await this._typePrompt(prompt)) {
-        throw new Error('Could not find text input field');
       }
 
       update('Starting generation...', 20);
