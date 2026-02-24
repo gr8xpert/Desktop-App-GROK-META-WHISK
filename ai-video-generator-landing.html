@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fantastic 4 — AI Video Generator</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0a0a1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* ── Background Effects ── */
+        .bg-gradient {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(ellipse at 50% 0%, rgba(30, 20, 60, 0.8) 0%, #0a0a1a 70%);
+            z-index: 0;
+        }
+
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            z-index: 1;
+        }
+
+        .orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .orb-1 {
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(8, 102, 255, 0.15) 0%, transparent 70%);
+            top: -100px;
+            left: -100px;
+            animation: float1 20s ease-in-out infinite;
+        }
+
+        .orb-2 {
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(168, 85, 247, 0.12) 0%, transparent 70%);
+            bottom: -50px;
+            right: -50px;
+            animation: float2 25s ease-in-out infinite;
+        }
+
+        @keyframes float1 {
+            0%, 100% { transform: translate(0, 0); }
+            50% { transform: translate(60px, 40px); }
+        }
+
+        @keyframes float2 {
+            0%, 100% { transform: translate(0, 0); }
+            50% { transform: translate(-50px, -30px); }
+        }
+
+        /* ── Container ── */
+        .container {
+            position: relative;
+            z-index: 10;
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 32px 24px 28px;
+            text-align: center;
+        }
+
+        /* ── Title ── */
+        h1 {
+            font-size: 2.6rem;
+            font-weight: 800;
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #0866FF 0%, #A855F7 50%, #F9AB00 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 6px;
+        }
+
+        .subtitle {
+            font-size: 1rem;
+            color: #8a8aa0;
+            margin-bottom: 28px;
+            font-weight: 400;
+        }
+
+        /* ── Provider Grid ── */
+        .providers-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .provider-card {
+            background: rgba(22, 27, 45, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-bottom: 3px solid;
+            border-radius: 14px;
+            padding: 20px 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            cursor: default;
+        }
+
+        .provider-card:hover {
+            transform: translateY(-4px);
+        }
+
+        .provider-card img {
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            object-fit: cover;
+            margin-bottom: 10px;
+        }
+
+        .provider-info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .provider-info h3 {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 2px;
+        }
+
+        .provider-info .capability {
+            font-size: 0.82rem;
+            font-weight: 500;
+        }
+
+        /* Provider theme colors */
+        .provider-card.meta {
+            border-bottom-color: #0866FF;
+        }
+        .provider-card.meta:hover {
+            box-shadow: 0 8px 32px rgba(8, 102, 255, 0.2);
+        }
+        .provider-card.meta .capability {
+            color: #0866FF;
+        }
+
+        .provider-card.grok {
+            border-bottom-color: #e0e0e0;
+        }
+        .provider-card.grok:hover {
+            box-shadow: 0 8px 32px rgba(255, 255, 255, 0.1);
+        }
+        .provider-card.grok .capability {
+            color: #c0c0c0;
+        }
+
+        .provider-card.whisk {
+            border-bottom-color: #F9AB00;
+        }
+        .provider-card.whisk:hover {
+            box-shadow: 0 8px 32px rgba(249, 171, 0, 0.2);
+        }
+        .provider-card.whisk .capability {
+            color: #F9AB00;
+        }
+
+        .provider-card.imagefx {
+            border-bottom-color: #A855F7;
+        }
+        .provider-card.imagefx:hover {
+            box-shadow: 0 8px 32px rgba(168, 85, 247, 0.2);
+        }
+        .provider-card.imagefx .capability {
+            color: #A855F7;
+        }
+
+        /* ── Stats ── */
+        .stats {
+            margin-bottom: 24px;
+        }
+
+        .stats .count {
+            font-size: 3rem;
+            font-weight: 800;
+            color: #fff;
+            display: block;
+            line-height: 1;
+        }
+
+        .stats .label {
+            font-size: 1.15rem;
+            color: #6a6a80;
+            margin-top: 4px;
+        }
+
+        /* ── Buttons ── */
+        .buttons {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 28px;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-download {
+            background: linear-gradient(135deg, #0866FF, #A855F7);
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(8, 102, 255, 0.3);
+        }
+
+        .btn-download:hover {
+            box-shadow: 0 6px 28px rgba(8, 102, 255, 0.45);
+        }
+
+        .btn-download svg, .btn-tutorial svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+
+        .btn-tutorial {
+            background: rgba(255, 255, 255, 0.08);
+            color: #e0e0e0;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .btn-tutorial:hover {
+            background: rgba(255, 255, 255, 0.12);
+            box-shadow: 0 4px 16px rgba(255, 255, 255, 0.05);
+        }
+
+        /* ── Footer ── */
+        .footer {
+            color: #5a5a70;
+            font-size: 0.9rem;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* ── Modal ── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-content {
+            position: relative;
+            width: 90%;
+            max-width: 720px;
+            background: #12121f;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+        }
+
+        .modal-content video {
+            width: 100%;
+            display: block;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 12px;
+            right: 16px;
+            width: 36px;
+            height: 36px;
+            background: rgba(0, 0, 0, 0.6);
+            border: none;
+            border-radius: 50%;
+            color: #fff;
+            font-size: 1.3rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            transition: background 0.2s;
+        }
+
+        .modal-close:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 600px) {
+            .container {
+                padding: 40px 16px 32px;
+            }
+
+            h1 {
+                font-size: 2.4rem;
+            }
+
+            .subtitle {
+                font-size: 1rem;
+                margin-bottom: 32px;
+            }
+
+            .providers-grid {
+                grid-template-columns: 1fr;
+                gap: 14px;
+            }
+
+            .provider-card {
+                padding: 24px 18px;
+                aspect-ratio: auto;
+            }
+
+            .provider-card img {
+                width: 60px;
+                height: 60px;
+                border-radius: 12px;
+                margin-bottom: 12px;
+            }
+
+            .buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Background -->
+    <div class="bg-gradient"></div>
+    <div class="bg-grid"></div>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+
+    <!-- Content -->
+    <div class="container">
+        <h1>Fantastic 4</h1>
+        <p class="subtitle">AI Video Generator &mdash; 4 Providers, Unlimited Creativity</p>
+
+        <div class="providers-grid">
+            <div class="provider-card meta">
+                <img src="meta.png" alt="Meta AI" width="256" height="256">
+                <div class="provider-info">
+                    <h3>Meta AI</h3>
+                    <span class="capability">Video Generator</span>
+                </div>
+            </div>
+            <div class="provider-card grok">
+                <img src="grok.png" alt="Grok AI" width="256" height="256">
+                <div class="provider-info">
+                    <h3>Grok AI</h3>
+                    <span class="capability">Video Generator</span>
+                </div>
+            </div>
+            <div class="provider-card whisk">
+                <img src="whisk.png" alt="Google Whisk" width="256" height="256">
+                <div class="provider-info">
+                    <h3>Google Whisk</h3>
+                    <span class="capability">Image Generator</span>
+                </div>
+            </div>
+            <div class="provider-card imagefx">
+                <img src="imagefx.png" alt="ImageFX" width="256" height="256">
+                <div class="provider-info">
+                    <h3>ImageFX</h3>
+                    <span class="capability">Image Generator</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats">
+            <span class="count" id="downloadCount">416</span>
+            <span class="label">Total Downloads</span>
+        </div>
+
+        <div class="buttons">
+            <a href="?download=1" class="btn btn-download">
+                <svg viewBox="0 0 24 24"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 4h14v-2H5v2z"/></svg>
+                Download Now
+            </a>
+            <button class="btn btn-tutorial" id="tutorialBtn">
+                <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                Watch Tutorial
+            </button>
+        </div>
+
+        <div class="footer">
+            Helpful? Keep me in your prayers &mdash; Regards Shahzaib Aslam
+        </div>
+    </div>
+
+    <!-- Tutorial Modal -->
+    <div class="modal-overlay" id="tutorialModal">
+        <div class="modal-content">
+            <button class="modal-close" id="modalClose">&times;</button>
+            <video id="tutorialVideo" controls>
+                <source src="tutorial.mp4" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+        </div>
+    </div>
+
+    <script>
+        // Tutorial modal
+        const tutorialBtn = document.getElementById('tutorialBtn');
+        const tutorialModal = document.getElementById('tutorialModal');
+        const modalClose = document.getElementById('modalClose');
+        const tutorialVideo = document.getElementById('tutorialVideo');
+
+        tutorialBtn.addEventListener('click', () => {
+            tutorialModal.classList.add('active');
+            tutorialVideo.play();
+        });
+
+        function closeModal() {
+            tutorialModal.classList.remove('active');
+            tutorialVideo.pause();
+            tutorialVideo.currentTime = 0;
+        }
+
+        modalClose.addEventListener('click', closeModal);
+
+        tutorialModal.addEventListener('click', (e) => {
+            if (e.target === tutorialModal) closeModal();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        // Download counter animation on page load
+        (function animateCounter() {
+            const el = document.getElementById('downloadCount');
+            const target = parseInt(el.textContent);
+            const duration = 1500;
+            const start = performance.now();
+            const from = 0;
+
+            function tick(now) {
+                const elapsed = now - start;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3);
+                el.textContent = Math.round(from + (target - from) * eased);
+                if (progress < 1) requestAnimationFrame(tick);
+            }
+
+            requestAnimationFrame(tick);
+        })();
+    </script>
+</body>
+</html>
